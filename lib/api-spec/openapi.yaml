@@ -1,22 +1,26 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PR Coach API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: athletes
+    description: Athlete profile operations
+  - name: records
+    description: Personal record operations
+  - name: openai
+    description: OpenAI AI chat operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +28,285 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /athletes/me:
+    get:
+      operationId: getAthlete
+      tags: [athletes]
+      summary: Get current athlete profile
+      responses:
+        "200":
+          description: Athlete profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Athlete"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: upsertAthlete
+      tags: [athletes]
+      summary: Create or update athlete profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AthleteInput"
+      responses:
+        "200":
+          description: Saved athlete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Athlete"
+
+  /records:
+    get:
+      operationId: listRecords
+      tags: [records]
+      summary: List personal records
+      parameters:
+        - name: sport
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of personal records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PersonalRecord"
+    post:
+      operationId: createRecord
+      tags: [records]
+      summary: Log a new personal record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonalRecordInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonalRecord"
+
+  /records/{id}:
+    delete:
+      operationId: deleteRecord
+      tags: [records]
+      summary: Delete a personal record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
+  /records/summary:
+    get:
+      operationId: getRecordsSummary
+      tags: [records]
+      summary: Get a summary of PRs grouped by sport and category
+      responses:
+        "200":
+          description: Summary of PRs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordsSummary"
+
+  /records/recent:
+    get:
+      operationId: getRecentRecords
+      tags: [records]
+      summary: Get recent personal records
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recent PRs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PersonalRecord"
+
+  /records/history/{sport}/{category}:
+    get:
+      operationId: getRecordHistory
+      tags: [records]
+      summary: Get history for a specific sport + category for charting
+      parameters:
+        - name: sport
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: category
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Historical records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PersonalRecord"
+
+  /openai/conversations:
+    get:
+      operationId: listOpenaiConversations
+      tags: [openai]
+      summary: List all conversations
+      responses:
+        "200":
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OpenaiConversation"
+    post:
+      operationId: createOpenaiConversation
+      tags: [openai]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenaiConversationInput"
+      responses:
+        "201":
+          description: Created conversation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiConversation"
+
+  /openai/conversations/{id}:
+    get:
+      operationId: getOpenaiConversation
+      tags: [openai]
+      summary: Get conversation with messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Conversation with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiConversationWithMessages"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiError"
+    delete:
+      operationId: deleteOpenaiConversation
+      tags: [openai]
+      summary: Delete a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpenaiError"
+
+  /openai/conversations/{id}/messages:
+    get:
+      operationId: listOpenaiMessages
+      tags: [openai]
+      summary: List messages in a conversation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OpenaiMessage"
+    post:
+      operationId: sendOpenaiMessage
+      tags: [openai]
+      summary: Send a text message and receive a streaming text response
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenaiMessageInput"
+      responses:
+        "200":
+          description: SSE stream of assistant text chunks
+          content:
+            text/event-stream: {}
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +317,249 @@ components:
       required:
         - status
 
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Athlete:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        age:
+          type: ["integer", "null"]
+        height:
+          type: ["string", "null"]
+        weight:
+          type: ["string", "null"]
+        sport:
+          type: string
+        experienceLevel:
+          type: string
+        weeklySchedule:
+          type: ["string", "null"]
+        goals:
+          type: ["string", "null"]
+        onboardingComplete:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - sport
+        - experienceLevel
+        - onboardingComplete
+        - createdAt
+
+    AthleteInput:
+      type: object
+      properties:
+        name:
+          type: string
+        age:
+          type: ["integer", "null"]
+        height:
+          type: ["string", "null"]
+        weight:
+          type: ["string", "null"]
+        sport:
+          type: string
+        experienceLevel:
+          type: string
+        weeklySchedule:
+          type: ["string", "null"]
+        goals:
+          type: ["string", "null"]
+        onboardingComplete:
+          type: boolean
+      required:
+        - name
+        - sport
+        - experienceLevel
+
+    PersonalRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        sport:
+          type: string
+        category:
+          type: string
+        value:
+          type: string
+        unit:
+          type: string
+        notes:
+          type: ["string", "null"]
+        achievedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sport
+        - category
+        - value
+        - unit
+        - achievedAt
+        - createdAt
+
+    PersonalRecordInput:
+      type: object
+      properties:
+        sport:
+          type: string
+        category:
+          type: string
+        value:
+          type: string
+        unit:
+          type: string
+        notes:
+          type: ["string", "null"]
+        achievedAt:
+          type: string
+          format: date-time
+      required:
+        - sport
+        - category
+        - value
+        - unit
+        - achievedAt
+
+    RecordsSummary:
+      type: object
+      properties:
+        totalPRs:
+          type: integer
+        sports:
+          type: array
+          items:
+            $ref: "#/components/schemas/SportSummary"
+      required:
+        - totalPRs
+        - sports
+
+    SportSummary:
+      type: object
+      properties:
+        sport:
+          type: string
+        count:
+          type: integer
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategorySummary"
+      required:
+        - sport
+        - count
+        - categories
+
+    CategorySummary:
+      type: object
+      properties:
+        category:
+          type: string
+        latestValue:
+          type: string
+        unit:
+          type: string
+        count:
+          type: integer
+      required:
+        - category
+        - latestValue
+        - unit
+        - count
+
+    OpenaiConversation:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - title
+        - createdAt
+
+    OpenaiMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - conversationId
+        - role
+        - content
+        - createdAt
+
+    OpenaiConversationInput:
+      type: object
+      properties:
+        title:
+          type: string
+      required:
+        - title
+
+    OpenaiMessageInput:
+      type: object
+      properties:
+        content:
+          type: string
+      required:
+        - content
+
+    OpenaiConversationWithMessages:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpenaiMessage"
+      required:
+        - id
+        - title
+        - createdAt
+        - messages
+
+    OpenaiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
