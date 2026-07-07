@@ -308,6 +308,59 @@ paths:
                 items:
                   $ref: "#/components/schemas/PersonalRecord"
 
+  /goals:
+    get:
+      operationId: listGoals
+      tags: [goals]
+      summary: List PR goals for the current user
+      responses:
+        "200":
+          description: List of goals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PrGoal"
+    post:
+      operationId: createGoal
+      tags: [goals]
+      summary: Create a new PR goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrGoalInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrGoal"
+
+  /goals/{id}:
+    delete:
+      operationId: deleteGoal
+      tags: [goals]
+      summary: Delete a PR goal
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+
   /openai/conversations:
     get:
       operationId: listOpenaiConversations
@@ -681,6 +734,51 @@ components:
         - latestValue
         - unit
         - count
+
+    PrGoal:
+      type: object
+      properties:
+        id:
+          type: integer
+        sport:
+          type: string
+        category:
+          type: string
+        targetValue:
+          type: string
+        unit:
+          type: string
+        deadline:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - sport
+        - category
+        - targetValue
+        - unit
+        - createdAt
+
+    PrGoalInput:
+      type: object
+      properties:
+        sport:
+          type: string
+        category:
+          type: string
+        targetValue:
+          type: string
+        unit:
+          type: string
+        deadline:
+          type: ["string", "null"]
+      required:
+        - sport
+        - category
+        - targetValue
+        - unit
 
     OpenaiConversation:
       type: object

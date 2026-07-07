@@ -264,6 +264,53 @@ export const GetRecordHistoryResponse = zod.array(GetRecordHistoryResponseItem)
 
 
 /**
+ * @summary List PR goals for the current user
+ */
+export const ListGoalsResponseItem = zod.object({
+  "id": zod.number(),
+  "sport": zod.string(),
+  "category": zod.string(),
+  "targetValue": zod.string(),
+  "unit": zod.string(),
+  "deadline": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+export const ListGoalsResponse = zod.array(ListGoalsResponseItem)
+
+
+/**
+ * @summary Create a new PR goal
+ */
+export const CreateGoalBody = zod.object({
+  "sport": zod.string(),
+  "category": zod.string(),
+  "targetValue": zod.string(),
+  "unit": zod.string(),
+  "deadline": zod.string().nullish()
+})
+
+export const CreateGoalResponse = zod.object({
+  "id": zod.number(),
+  "sport": zod.string(),
+  "category": zod.string(),
+  "targetValue": zod.string(),
+  "unit": zod.string(),
+  "deadline": zod.string().nullish(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a PR goal
+ */
+export const DeleteGoalParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteGoalResponse = zod.void()
+
+
+/**
  * @summary List all conversations
  */
 export const ListOpenaiConversationsResponseItem = zod.object({

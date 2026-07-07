@@ -30,5 +30,7 @@ export * from './openaiMessage';
 export * from './openaiMessageInput';
 export * from './personalRecord';
 export * from './personalRecordInput';
+export * from './prGoal';
+export * from './prGoalInput';
 export * from './recordsSummary';
 export * from './sportSummary';

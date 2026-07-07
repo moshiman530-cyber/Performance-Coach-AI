@@ -1,25 +1,73 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetAthlete,
   useGetRecordsSummary,
   useGetRecentRecords,
+  useListGoals,
+  useCreateGoal,
+  useDeleteGoal,
+  getListGoalsQueryKey,
 } from "@workspace/api-client-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trophy, TrendingUp, Activity, Zap, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Trophy, TrendingUp, Activity, Zap, ChevronRight, Plus, Trash2, Target } from "lucide-react";
 import { Link } from "wouter";
 
+// Mirror the same sports config for goal-setting dropdowns
+const SPORTS_CATEGORIES: Record<string, string[]> = {
+  Running: ["Mile", "5K", "10K", "Half Marathon", "Marathon"],
+  Weightlifting: ["Bench Press", "Squat", "Deadlift", "Overhead Press", "Power Clean"],
+  Powerlifting: ["Squat", "Bench Press", "Deadlift", "Total"],
+  Basketball: ["Vertical Jump", "Sprint Time", "Free Throw %", "3-Point %"],
+  Swimming: ["50m Freestyle", "100m Freestyle", "200m Freestyle", "100m Backstroke", "100m Breaststroke"],
+  Cycling: ["5K", "10K", "20K", "FTP"],
+  Football: ["40-Yard Dash", "Vertical Jump", "Bench Press Reps", "Broad Jump"],
+  Soccer: ["40m Sprint", "Vertical Jump", "Shot Speed"],
+  "Track & Field": ["100m", "200m", "400m", "Long Jump", "High Jump", "Shot Put"],
+  CrossFit: ["Fran", "Grace", "Cindy", "Max Pull-ups", "Max Push-ups"],
+  Volleyball: ["Vertical Jump", "Serve Speed", "Block Reach"],
+};
+
+const SPORT_ICONS: Record<string, string> = {
+  Running: "🏃", Weightlifting: "🏋️", Powerlifting: "💪", Basketball: "🏀",
+  Swimming: "🏊", Cycling: "🚴", Football: "🏈", Soccer: "⚽",
+  "Track & Field": "🏟️", CrossFit: "🔥", Volleyball: "🏐",
+};
+
+// Parse "min:sec" or plain numeric strings to a comparable number
+function parseValue(val: string): number {
+  if (val.includes(":")) {
+    const [min, sec] = val.split(":").map(Number);
+    return (min || 0) * 60 + (sec || 0);
+  }
+  return parseFloat(val) || 0;
+}
+
+// For time-based units: lower is better. For others: higher is better.
+const TIME_UNITS = new Set(["min:sec", "sec"]);
+
+function computeProgress(current: string, target: string, unit: string): number {
+  const cur = parseValue(current);
+  const tgt = parseValue(target);
+  if (!tgt || !cur) return 0;
+  if (TIME_UNITS.has(unit)) {
+    // Lower is better: 100% when current ≤ target
+    return Math.min(100, Math.round((tgt / cur) * 100));
+  }
+  return Math.min(100, Math.round((cur / tgt) * 100));
+}
+
 function StatCard({
-  label,
-  value,
-  sub,
-  icon: Icon,
+  label, value, sub, icon: Icon,
 }: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  icon: typeof Trophy;
+  label: string; value: string | number; sub?: string; icon: typeof Trophy;
 }) {
   return (
     <div className="p-6 border border-border bg-card hover:border-primary/40 transition-colors group">
@@ -29,6 +77,242 @@ function StatCard({
       </div>
       <div className="text-4xl font-black text-foreground">{value}</div>
       {sub && <div className="text-xs text-muted-foreground mt-1 font-mono">{sub}</div>}
+    </div>
+  );
+}
+
+function AddGoalDialog() {
+  const queryClient = useQueryClient();
+  const createGoal = useCreateGoal();
+  const [open, setOpen] = useState(false);
+  const [sport, setSport] = useState("Running");
+  const [category, setCategory] = useState("Mile");
+  const [targetValue, setTargetValue] = useState("");
+  const [unit, setUnit] = useState("min:sec");
+  const [deadline, setDeadline] = useState("");
+
+  const categories = SPORTS_CATEGORIES[sport] ?? [];
+
+  const handleSportChange = (s: string) => {
+    setSport(s);
+    const cats = SPORTS_CATEGORIES[s] ?? [];
+    setCategory(cats[0] ?? "");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetValue.trim()) return;
+    await createGoal.mutateAsync({
+      data: {
+        sport,
+        category,
+        targetValue: targetValue.trim(),
+        unit: unit.trim(),
+        deadline: deadline || null,
+      },
+    });
+    queryClient.invalidateQueries({ queryKey: getListGoalsQueryKey() });
+    setTargetValue("");
+    setDeadline("");
+    setOpen(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="flex items-center gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-bold uppercase tracking-wider text-sm">
+          <Plus size={16} /> Set Goal
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-card border-border max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-black uppercase tracking-tight text-xl">
+            🎯 Set a PR Goal
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Sport</Label>
+              <Select value={sport} onValueChange={handleSportChange}>
+                <SelectTrigger className="bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {Object.keys(SPORTS_CATEGORIES).map((s) => (
+                    <SelectItem key={s} value={s}>{SPORT_ICONS[s]} {s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="bg-secondary border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {categories.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Target Value</Label>
+              <Input
+                value={targetValue}
+                onChange={(e) => setTargetValue(e.target.value)}
+                placeholder="e.g. 4:30"
+                className="bg-secondary border-border font-mono focus-visible:ring-primary"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Unit</Label>
+              <Input
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="e.g. min:sec"
+                className="bg-secondary border-border font-mono focus-visible:ring-primary"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+              Deadline (optional)
+            </Label>
+            <Input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="bg-secondary border-border font-mono focus-visible:ring-primary"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={createGoal.isPending}
+            className="w-full bg-primary text-primary-foreground font-bold uppercase tracking-wider hover:bg-primary/90"
+          >
+            {createGoal.isPending ? "Saving..." : "Save Goal"}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function GoalsSection() {
+  const queryClient = useQueryClient();
+  const { data: goals, isLoading } = useListGoals();
+  const { data: summary } = useGetRecordsSummary();
+  const deleteGoal = useDeleteGoal();
+
+  const handleDelete = async (id: number) => {
+    await deleteGoal.mutateAsync({ id });
+    queryClient.invalidateQueries({ queryKey: getListGoalsQueryKey() });
+  };
+
+  // Build a map of current PRs: sport+category → latestValue+unit
+  const currentPRs: Record<string, { value: string; unit: string }> = {};
+  for (const sport of summary?.sports ?? []) {
+    for (const cat of sport.categories) {
+      currentPRs[`${sport.sport}::${cat.category}`] = { value: cat.latestValue, unit: cat.unit };
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-20" />)}
+      </div>
+    );
+  }
+
+  if (!goals || goals.length === 0) {
+    return (
+      <div className="border border-dashed border-border p-10 text-center">
+        <Target size={28} className="text-muted-foreground mx-auto mb-3" />
+        <p className="text-muted-foreground font-mono text-sm uppercase">No goals set yet</p>
+        <p className="text-xs text-muted-foreground mt-1">Set a target PR to track your progress</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {goals.map((goal) => {
+        const pr = currentPRs[`${goal.sport}::${goal.category}`];
+        const progress = pr ? computeProgress(pr.value, goal.targetValue, goal.unit) : 0;
+        const achieved = progress >= 100;
+
+        return (
+          <div
+            key={goal.id}
+            className={`border bg-card p-5 ${achieved ? "border-primary/60 bg-primary/5" : "border-border"}`}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">{SPORT_ICONS[goal.sport] ?? "🎯"}</span>
+                  <span className="font-black uppercase tracking-tight text-sm">
+                    {goal.sport} — {goal.category}
+                  </span>
+                  {achieved && (
+                    <span className="text-xs font-mono text-primary bg-primary/10 border border-primary/30 px-2 py-0.5 uppercase">
+                      ✓ Achieved
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground mb-3">
+                  <span>
+                    Target: <span className="text-foreground font-bold">{goal.targetValue} {goal.unit}</span>
+                  </span>
+                  {pr ? (
+                    <span>
+                      Current PR: <span className="text-primary font-bold">{pr.value} {pr.unit}</span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground/60">No PR logged yet</span>
+                  )}
+                  {goal.deadline && (
+                    <span>by {goal.deadline}</span>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-secondary h-2 relative overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-500 ${achieved ? "bg-primary" : "bg-primary/60"}`}
+                    style={{ width: `${Math.min(100, progress)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-xs font-mono text-muted-foreground">0%</span>
+                  <span className={`text-xs font-mono font-bold ${achieved ? "text-primary" : "text-muted-foreground"}`}>
+                    {progress}%
+                  </span>
+                  <span className="text-xs font-mono text-muted-foreground">100%</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleDelete(goal.id)}
+                className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-1"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -92,31 +376,30 @@ export default function Dashboard() {
             [...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)
           ) : (
             <>
-              <StatCard
-                label="Total PRs"
-                value={summary?.totalPRs ?? 0}
-                sub="All time"
-                icon={Trophy}
-              />
-              <StatCard
-                label="Sports"
-                value={topSports.length}
-                sub="Tracked categories"
-                icon={Activity}
-              />
+              <StatCard label="Total PRs" value={summary?.totalPRs ?? 0} sub="All time" icon={Trophy} />
+              <StatCard label="Sports" value={topSports.length} sub="Tracked categories" icon={Activity} />
               <StatCard
                 label="Best Sport"
                 value={topSports[0]?.sport ?? "—"}
                 sub={`${topSports[0]?.count ?? 0} PRs`}
                 icon={TrendingUp}
               />
-              <StatCard
-                label="Experience"
-                value={athlete?.experienceLevel ?? "—"}
-                icon={Zap}
-              />
+              <StatCard label="Experience" value={athlete?.experienceLevel ?? "—"} icon={Zap} />
             </>
           )}
+        </div>
+
+        {/* Goals Section */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
+                PR Goals
+              </h2>
+            </div>
+            <AddGoalDialog />
+          </div>
+          <GoalsSection />
         </div>
 
         {/* Sport Breakdown */}
@@ -133,7 +416,9 @@ export default function Dashboard() {
                   className="border border-border bg-card p-6 hover:border-primary/30 transition-colors"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-black uppercase tracking-tight text-lg">{sport.sport}</h3>
+                    <h3 className="font-black uppercase tracking-tight text-lg">
+                      {SPORT_ICONS[sport.sport] ?? ""} {sport.sport}
+                    </h3>
                     <span className="text-xs font-mono text-primary">{sport.count} PRs</span>
                   </div>
                   <div className="space-y-2">
@@ -205,14 +490,6 @@ export default function Dashboard() {
             </div>
           )}
         </div>
-
-        {/* Goals */}
-        {athlete?.goals && (
-          <div className="border border-primary/20 bg-primary/5 p-6">
-            <p className="text-xs font-mono text-primary uppercase tracking-widest mb-2">Your Goals</p>
-            <p className="text-foreground font-medium leading-relaxed">{athlete.goals}</p>
-          </div>
-        )}
       </div>
     </AppLayout>
   );

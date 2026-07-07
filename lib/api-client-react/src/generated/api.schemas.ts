@@ -131,6 +131,26 @@ export interface RecordsSummary {
   sports: SportSummary[];
 }
 
+export interface PrGoal {
+  id: number;
+  sport: string;
+  category: string;
+  targetValue: string;
+  unit: string;
+  /** @nullable */
+  deadline?: string | null;
+  createdAt: string;
+}
+
+export interface PrGoalInput {
+  sport: string;
+  category: string;
+  targetValue: string;
+  unit: string;
+  /** @nullable */
+  deadline?: string | null;
+}
+
 export interface OpenaiConversation {
   id: number;
   title: string;
