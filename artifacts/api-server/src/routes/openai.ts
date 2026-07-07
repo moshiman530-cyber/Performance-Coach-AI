@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { db, conversations, messages, athletes, personalRecords } from "@workspace/db";
+import { db, conversations, messages, athletes, personalRecords, prGoals } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { CreateOpenaiConversationBody, SendOpenaiMessageBody } from "@workspace/api-zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, gte } from "drizzle-orm";
 
 const router = Router();
 
@@ -193,7 +193,94 @@ Do not use emojis. Keep responses concise and actionable.`;
   });
 
   res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-  res.end();
+  return res.end();
+});
+
+// Weekly training summary — SSE streaming endpoint
+router.get("/openai/summary/weekly", async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+
+  const [athleteRow] = await db
+    .select()
+    .from(athletes)
+    .where(eq(athletes.userId, req.user.id))
+    .limit(1);
+
+  const prRows = await db
+    .select()
+    .from(personalRecords)
+    .where(athleteRow ? eq(personalRecords.athleteId, athleteRow.id) : eq(personalRecords.id, -1))
+    .orderBy(desc(personalRecords.achievedAt))
+    .limit(50);
+
+  // PRs from the last 7 days
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const recentPRs = prRows.filter((r) => new Date(r.achievedAt) >= oneWeekAgo);
+
+  const goalRows = await db
+    .select()
+    .from(prGoals)
+    .where(athleteRow ? eq(prGoals.athleteId, athleteRow.id) : eq(prGoals.id, -1))
+    .orderBy(prGoals.createdAt);
+
+  const prSummary =
+    prRows.length > 0
+      ? prRows.map((r) => `${r.sport} - ${r.category}: ${r.value} ${r.unit} (${r.achievedAt})`).join("\n")
+      : "No PRs logged yet";
+
+  const recentSummary =
+    recentPRs.length > 0
+      ? recentPRs.map((r) => `${r.sport} - ${r.category}: ${r.value} ${r.unit}`).join("\n")
+      : "No new PRs this week";
+
+  const goalSummary =
+    goalRows.length > 0
+      ? goalRows.map((g) => `${g.sport} - ${g.category}: target ${g.targetValue} ${g.unit}${g.deadline ? ` by ${g.deadline}` : ""}`).join("\n")
+      : "No goals set";
+
+  const systemPrompt = `You are PR Coach, an expert AI athletic coach. Generate a concise weekly training summary for the athlete.
+${
+  athleteRow
+    ? `Athlete: ${athleteRow.name}, ${athleteRow.sport}, ${athleteRow.experienceLevel} level.`
+    : "Athlete profile not set up yet."
+}
+
+All-time PRs:
+${prSummary}
+
+PRs logged this week:
+${recentSummary}
+
+Active goals:
+${goalSummary}
+
+Write a weekly summary with these sections:
+1. THIS WEEK — what PRs were set (or note if it was a rest week)
+2. PROGRESS TOWARD GOALS — how close they are to each active goal, be specific with numbers
+3. FOCUS FOR NEXT WEEK — 2-3 specific, actionable training recommendations
+
+Be direct, data-driven, and motivating. No emojis. Keep it under 250 words total.`;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const stream = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    max_completion_tokens: 512,
+    messages: [{ role: "system", content: systemPrompt }],
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content;
+    if (content) {
+      res.write(`data: ${JSON.stringify({ content })}\n\n`);
+    }
+  }
+
+  res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+  return res.end();
 });
 
 export default router;

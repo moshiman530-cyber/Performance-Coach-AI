@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Trophy, TrendingUp, Activity, Zap, ChevronRight, Plus, Trash2, Target } from "lucide-react";
+import { Trophy, TrendingUp, Activity, Zap, ChevronRight, Plus, Trash2, Target, RefreshCw, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 
 // Mirror the same sports config for goal-setting dropdowns
@@ -205,6 +205,101 @@ function AddGoalDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WeeklySummary() {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [started, setStarted] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const generate = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setText("");
+    setLoading(true);
+    setStarted(true);
+
+    fetch("/api/openai/summary/weekly", { signal: ctrl.signal, credentials: "include" })
+      .then(async (res) => {
+        if (!res.ok || !res.body) { setLoading(false); return; }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const parts = buf.split("\n\n");
+          buf = parts.pop() ?? "";
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const json = JSON.parse(line.slice(6));
+              if (json.content) setText((prev) => prev + json.content);
+              if (json.done) setLoading(false);
+            } catch {}
+          }
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  // Format the plain text into sections with bold headers
+  const formatted = text.replace(
+    /^(THIS WEEK|PROGRESS TOWARD GOALS|FOCUS FOR NEXT WEEK)/gm,
+    "**$1**"
+  );
+
+  const renderFormatted = (raw: string) => {
+    return raw.split("\n").map((line, i) => {
+      const bold = line.replace(/\*\*(.+?)\*\*/g, (_, m) => `<strong>${m}</strong>`);
+      return <p key={i} className="leading-relaxed" dangerouslySetInnerHTML={{ __html: bold || "&nbsp;" }} />;
+    });
+  };
+
+  return (
+    <div className="border border-border bg-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-primary" />
+          <span className="text-xs font-mono uppercase tracking-widest text-muted-foreground">Weekly Training Summary</span>
+        </div>
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wide text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw size={12} className={loading ? "animate-spin" : ""} />
+          {started ? "Regenerate" : "Generate"}
+        </button>
+      </div>
+
+      {!started && (
+        <div className="border border-dashed border-border p-8 text-center">
+          <Sparkles size={24} className="text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground font-mono text-sm uppercase">AI-powered weekly recap</p>
+          <p className="text-xs text-muted-foreground mt-1 mb-4">PRs this week, goal progress, and what to focus on next</p>
+          <button
+            onClick={generate}
+            className="px-4 py-2 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-wider hover:bg-primary/90 transition-colors"
+          >
+            Generate Summary
+          </button>
+        </div>
+      )}
+
+      {started && (
+        <div className="text-sm text-foreground space-y-1 font-mono min-h-[80px]">
+          {renderFormatted(formatted)}
+          {loading && <span className="inline-block w-1.5 h-4 bg-primary animate-pulse ml-0.5 align-middle" />}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -401,6 +496,9 @@ export default function Dashboard() {
           </div>
           <GoalsSection />
         </div>
+
+        {/* Weekly Summary */}
+        <WeeklySummary />
 
         {/* Sport Breakdown */}
         {topSports.length > 0 && (

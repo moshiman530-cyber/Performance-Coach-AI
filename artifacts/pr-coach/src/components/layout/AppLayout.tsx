@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@workspace/replit-auth-web";
-import { useGetAthlete } from "@workspace/api-client-react";
+import { useGetAthlete, getGetAthleteQueryKey } from "@workspace/api-client-react";
 import { Loader2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -9,7 +9,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
   const { data: athlete, isLoading: athleteLoading } = useGetAthlete({
-    query: { enabled: isAuthenticated },
+    query: { enabled: isAuthenticated, queryKey: getGetAthleteQueryKey() },
   });
 
   const isPublicPage = location === "/" || location === "/onboarding";

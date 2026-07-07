@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@workspace/replit-auth-web";
-import { useGetAthlete } from "@workspace/api-client-react";
+import { useGetAthlete, getGetAthleteQueryKey } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Activity, TrendingUp, Trophy, Zap, Loader2 } from "lucide-react";
 
@@ -9,7 +9,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { isAuthenticated, isLoading: authLoading, login } = useAuth();
   const { data: athlete, isLoading: athleteLoading } = useGetAthlete({
-    query: { enabled: isAuthenticated },
+    query: { enabled: isAuthenticated, queryKey: getGetAthleteQueryKey() },
   });
 
   useEffect(() => {
