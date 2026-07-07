@@ -16,7 +16,7 @@ const QUESTIONS = [
   "Nice to meet you! How old are you? (You can skip this if you prefer)",
   "Got it. What's your height? (optional)",
   "And your weight? (optional)",
-  "What's your main sport? (Running, Weightlifting, or Basketball)",
+  "What's your main sport? (Running, Weightlifting, Powerlifting, Basketball, Swimming, Cycling, Football, Soccer, Track & Field, CrossFit, Volleyball, or other)",
   "How would you describe your experience level? (Beginner, Intermediate, or Advanced)",
   "Tell me about your current personal records — what are your best numbers right now?",
   "How many days a week do you train, and what does a typical week look like?",
