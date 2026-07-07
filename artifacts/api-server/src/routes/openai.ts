@@ -2,36 +2,44 @@ import { Router } from "express";
 import { db, conversations, messages, athletes, personalRecords } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { CreateOpenaiConversationBody, SendOpenaiMessageBody } from "@workspace/api-zod";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 
 const router = Router();
 
 router.get("/openai/conversations", async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+
   const rows = await db
     .select()
     .from(conversations)
+    .where(eq(conversations.userId, req.user.id))
     .orderBy(desc(conversations.createdAt));
   return res.json(rows);
 });
 
 router.post("/openai/conversations", async (req, res) => {
-  const parsed = CreateOpenaiConversationBody.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.message });
-  }
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
 
-  const [conv] = await db.insert(conversations).values(parsed.data).returning();
+  const parsed = CreateOpenaiConversationBody.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+  const [conv] = await db
+    .insert(conversations)
+    .values({ ...parsed.data, userId: req.user.id })
+    .returning();
   return res.status(201).json(conv);
 });
 
 router.get("/openai/conversations/:id", async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
 
   const [conv] = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.id, id))
+    .where(and(eq(conversations.id, id), eq(conversations.userId, req.user.id)))
     .limit(1);
 
   if (!conv) return res.status(404).json({ error: "Conversation not found" });
@@ -46,12 +54,14 @@ router.get("/openai/conversations/:id", async (req, res) => {
 });
 
 router.delete("/openai/conversations/:id", async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
 
   const [deleted] = await db
     .delete(conversations)
-    .where(eq(conversations.id, id))
+    .where(and(eq(conversations.id, id), eq(conversations.userId, req.user.id)))
     .returning();
 
   if (!deleted) return res.status(404).json({ error: "Conversation not found" });
@@ -60,6 +70,8 @@ router.delete("/openai/conversations/:id", async (req, res) => {
 });
 
 router.get("/openai/conversations/:id/messages", async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
 
@@ -73,18 +85,18 @@ router.get("/openai/conversations/:id/messages", async (req, res) => {
 });
 
 router.post("/openai/conversations/:id/messages", async (req, res) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
 
   const parsed = SendOpenaiMessageBody.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.message });
-  }
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
 
   const [conv] = await db
     .select()
     .from(conversations)
-    .where(eq(conversations.id, id))
+    .where(and(eq(conversations.id, id), eq(conversations.userId, req.user.id)))
     .limit(1);
 
   if (!conv) return res.status(404).json({ error: "Conversation not found" });
@@ -95,32 +107,34 @@ router.post("/openai/conversations/:id/messages", async (req, res) => {
     .where(eq(messages.conversationId, id))
     .orderBy(messages.createdAt);
 
-  const athleteRows = await db.select().from(athletes).limit(1);
-  const athlete = athleteRows[0];
+  const [athleteRow] = await db
+    .select()
+    .from(athletes)
+    .where(eq(athletes.userId, req.user.id))
+    .limit(1);
 
   const prRows = await db
     .select()
     .from(personalRecords)
+    .where(athleteRow ? eq(personalRecords.athleteId, athleteRow.id) : eq(personalRecords.id, -1))
     .orderBy(desc(personalRecords.achievedAt))
     .limit(20);
 
   const prSummary =
     prRows.length > 0
-      ? prRows
-          .map((r) => `${r.sport} - ${r.category}: ${r.value} ${r.unit}`)
-          .join(", ")
+      ? prRows.map((r) => `${r.sport} - ${r.category}: ${r.value} ${r.unit}`).join(", ")
       : "No PRs logged yet";
 
   const systemPrompt = `You are PR Coach, an expert AI athletic coach and motivator. You help athletes track personal records, analyze progress, and improve performance.
 ${
-  athlete
+  athleteRow
     ? `
 Athlete profile:
-- Name: ${athlete.name}
-- Sport: ${athlete.sport}
-- Experience level: ${athlete.experienceLevel}
-- Goals: ${athlete.goals ?? "Not specified"}
-- Weekly schedule: ${athlete.weeklySchedule ?? "Not specified"}
+- Name: ${athleteRow.name}
+- Sport: ${athleteRow.sport}
+- Experience level: ${athleteRow.experienceLevel}
+- Goals: ${athleteRow.goals ?? "Not specified"}
+- Weekly schedule: ${athleteRow.weeklySchedule ?? "Not specified"}
 `
     : ""
 }

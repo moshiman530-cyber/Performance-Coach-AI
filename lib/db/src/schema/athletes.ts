@@ -1,9 +1,10 @@
-import { boolean, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, serial, text, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const athletes = pgTable("athletes", {
   id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().unique(),
   name: text("name").notNull(),
   age: integer("age"),
   height: text("height"),

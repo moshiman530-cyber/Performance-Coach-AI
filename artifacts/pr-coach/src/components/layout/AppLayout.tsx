@@ -1,15 +1,26 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@workspace/replit-auth-web";
 import { useGetAthlete } from "@workspace/api-client-react";
-import { Loader2 } from "lucide-react";
+import { Loader2, LogOut } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
-  const { data: athlete, isLoading } = useGetAthlete();
+  const [location, setLocation] = useLocation();
+  const { isAuthenticated, isLoading: authLoading, logout } = useAuth();
+  const { data: athlete, isLoading: athleteLoading } = useGetAthlete({
+    query: { enabled: isAuthenticated },
+  });
 
   const isPublicPage = location === "/" || location === "/onboarding";
 
-  if (isLoading && !isPublicPage) {
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated && !isPublicPage) {
+      setLocation("/");
+    }
+  }, [authLoading, isAuthenticated, isPublicPage, setLocation]);
+
+  if ((authLoading || (isAuthenticated && athleteLoading)) && !isPublicPage) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -54,7 +65,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             
             <div className="hidden md:flex items-center gap-4">
               {athlete && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <div className="text-right text-sm">
                     <div className="font-bold text-foreground">{athlete.name}</div>
                     <div className="text-xs text-muted-foreground font-mono">{athlete.sport}</div>
@@ -62,6 +73,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center font-bold text-lg border border-border">
                     {athlete.name?.charAt(0).toUpperCase() || "A"}
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={logout}
+                    title="Sign out"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
                 </div>
               )}
             </div>

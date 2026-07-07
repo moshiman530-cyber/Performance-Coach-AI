@@ -1,18 +1,36 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@workspace/replit-auth-web";
 import { useGetAthlete } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Activity, TrendingUp, Trophy, Zap } from "lucide-react";
+import { ArrowRight, Activity, TrendingUp, Trophy, Zap, Loader2 } from "lucide-react";
 
 export default function Home() {
   const [, setLocation] = useLocation();
-  const { data: athlete, isLoading } = useGetAthlete();
+  const { isAuthenticated, isLoading: authLoading, login } = useAuth();
+  const { data: athlete, isLoading: athleteLoading } = useGetAthlete({
+    query: { enabled: isAuthenticated },
+  });
 
   useEffect(() => {
-    if (athlete?.onboardingComplete) {
-      setLocation("/dashboard");
+    if (!authLoading && isAuthenticated) {
+      if (!athleteLoading) {
+        if (athlete?.onboardingComplete) {
+          setLocation("/dashboard");
+        } else {
+          setLocation("/onboarding");
+        }
+      }
     }
-  }, [athlete, setLocation]);
+  }, [isAuthenticated, authLoading, athlete, athleteLoading, setLocation]);
+
+  if (authLoading || (isAuthenticated && athleteLoading)) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-background">
@@ -24,11 +42,13 @@ export default function Home() {
           COACH
         </div>
         <div className="flex gap-4">
-          <Link href="/onboarding">
-            <Button variant="outline" className="font-mono uppercase tracking-wider text-xs">
-              Log In
-            </Button>
-          </Link>
+          <Button
+            onClick={login}
+            variant="outline"
+            className="font-mono uppercase tracking-wider text-xs"
+          >
+            Log In
+          </Button>
         </div>
       </header>
 
@@ -48,11 +68,13 @@ export default function Home() {
             The obsessive tracker for athletes who want to push further, lift heavier, and run faster. Your personal AI coach is waiting.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/onboarding">
-              <Button size="lg" className="h-16 px-8 text-lg font-bold uppercase tracking-wider bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto group">
-                Start Tracking <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </Link>
+            <Button
+              size="lg"
+              onClick={login}
+              className="h-16 px-8 text-lg font-bold uppercase tracking-wider bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto group"
+            >
+              Start Tracking <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+            </Button>
             <Button size="lg" variant="outline" className="h-16 px-8 text-lg font-bold uppercase tracking-wider w-full sm:w-auto border-border hover:bg-secondary">
               View Features
             </Button>
@@ -93,11 +115,13 @@ export default function Home() {
       <section className="py-32 relative border-t border-border">
         <div className="container mx-auto px-4 text-center">
           <h2 className="text-4xl md:text-6xl font-black uppercase mb-8">Ready to break<br/>your limits?</h2>
-          <Link href="/onboarding">
-            <Button size="lg" className="h-20 px-12 text-2xl font-black uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90">
-              Enter The Gym
-            </Button>
-          </Link>
+          <Button
+            size="lg"
+            onClick={login}
+            className="h-20 px-12 text-2xl font-black uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            Enter The Gym
+          </Button>
         </div>
       </section>
     </div>

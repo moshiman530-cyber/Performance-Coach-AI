@@ -6,13 +6,15 @@ import { eq } from "drizzle-orm";
 
 const router = Router();
 
-const SINGLE_ATHLETE_ID = 1;
-
 router.get("/athletes/me", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const [athlete] = await db
     .select()
     .from(athletes)
-    .where(eq(athletes.id, SINGLE_ATHLETE_ID))
+    .where(eq(athletes.userId, req.user.id))
     .limit(1);
 
   if (!athlete) {
@@ -23,28 +25,34 @@ router.get("/athletes/me", async (req, res) => {
 });
 
 router.put("/athletes/me", async (req, res) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const parsed = UpsertAthleteBody.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.message });
   }
 
-  const existing = await db
+  const userId = req.user.id;
+
+  const [existing] = await db
     .select()
     .from(athletes)
-    .where(eq(athletes.id, SINGLE_ATHLETE_ID))
+    .where(eq(athletes.userId, userId))
     .limit(1);
 
-  if (existing.length > 0) {
+  if (existing) {
     const [updated] = await db
       .update(athletes)
       .set(parsed.data)
-      .where(eq(athletes.id, SINGLE_ATHLETE_ID))
+      .where(eq(athletes.userId, userId))
       .returning();
     return res.json(updated);
   } else {
     const [created] = await db
       .insert(athletes)
-      .values({ ...parsed.data, id: SINGLE_ATHLETE_ID } as typeof athletes.$inferInsert)
+      .values({ ...parsed.data, userId })
       .returning();
     return res.json(created);
   }
